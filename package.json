@@ -1,0 +1,23 @@
+{
+  "name": "astro-sqlite-bullmq-starter",
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/node": "^6.0.3",
+    "astro": "^3.4.0",
+    "better-sqlite3": "^9.0.0",
+    "bullmq": "^4.12.7",
+    "htmx.org": "^1.9.6"
+  },
+  "devDependencies": {
+    "prettier": "^3.0.3",
+    "prettier-plugin-astro": "^0.12.1"
+  }
+}

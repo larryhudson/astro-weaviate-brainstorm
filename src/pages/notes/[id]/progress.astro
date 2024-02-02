@@ -1,0 +1,23 @@
+---
+import { getRecordById } from "@src/utils/db";
+
+const { id } = Astro.params;
+
+const note = getRecordById("notes", id);
+const progress = note.progress;
+const isFinished = progress === 100;
+---
+
+{
+  isFinished ? (
+    <span>Done!</span>
+  ) : (
+    <progress
+      value={progress}
+      max="100"
+      hx-get={`/notes/${id}/progress`}
+      hx-trigger="every 500ms"
+      hx-swap="outerHTML"
+    />
+  )
+}

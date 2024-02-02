@@ -1,0 +1,30 @@
+---
+import {getRecordById, updateRecord} from "@src/utils/db";
+
+import Layout from "@src/components/Layout.astro";
+
+const {id} = Astro.params;
+
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const title = formData.get('title');
+  const body = formData.get('body');
+
+  const updated = updateRecord('notes', id, {title, body});
+  if (updated) return Astro.redirect(`/notes/${id}?status=updated`);
+}
+
+const note = getRecordById('notes', id);
+---
+
+<Layout title={`Editing note: ${note.title}`}>
+
+<form method="POST">
+	<label for="title-input">Title</label>
+	<input name="title" id="title-input" value={note.title} />
+	<label for="body-input">Body</label>
+	<textarea name="body" id="body-input">{note.body}</textarea>
+	<button>Save</button>
+</form>
+
+</Layout>

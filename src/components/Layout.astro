@@ -1,0 +1,43 @@
+---
+import { getStatusMessage } from "@src/utils/status-messages";
+import HtmxPath from "htmx.org/dist/htmx.min.js?url";
+
+const title = Astro.props.title || "Astro";
+const statusId = Astro.url.searchParams.get("status");
+
+const statusMessage = getStatusMessage(statusId);
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{title}</title>
+    <script is:inline src={HtmxPath}></script>
+  </head>
+  <body>
+    <header>
+      {statusMessage && <p>{statusMessage}</p>}
+    </header>
+    <main>
+      <h1>{title}</h1>
+      <slot />
+    </main>
+  </body>
+</html>
+
+<style>
+  html {
+    background-color: lightgray;
+  }
+
+  body {
+    background-color: white;
+    padding: 2rem;
+    font-family: system-ui;
+    max-width: 60rem;
+    margin-inline: auto;
+  }
+</style>
