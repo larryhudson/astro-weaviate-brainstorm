@@ -22,3 +22,6 @@ pnpm-debug.log*
 
 # sqlite database (.db, .db-shm, .db-wal)
 *.db*
+
+# weaviate data folder
+weaviate-data

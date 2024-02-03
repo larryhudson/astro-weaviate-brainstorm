@@ -1,3 +1,7 @@
+This is a project for me to play around with some ideas for a brainstorming app using Astro + Weaviate.
+
+It's heavily inspired by [Brainstory](https://brainstory.ai) - a great web app that guides you through a brainstorming session and helps you turn your ideas into something real.
+
 # Astro starter with SQLite and BullMQ
 
 This is an Astro starter project with a headstart for creating server-rendered web apps. I have been using this pattern for creating fairly simple web apps and deploying them on Ubuntu VPS servers.

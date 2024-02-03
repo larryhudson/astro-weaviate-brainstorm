@@ -1,11 +1,7 @@
 ---
-import { getStatusMessage } from "@src/utils/status-messages";
 import HtmxPath from "htmx.org/dist/htmx.min.js?url";
 
 const title = Astro.props.title || "Astro";
-const statusId = Astro.url.searchParams.get("status");
-
-const statusMessage = getStatusMessage(statusId);
 ---
 
 <html lang="en">
@@ -18,9 +14,7 @@ const statusMessage = getStatusMessage(statusId);
     <script is:inline src={HtmxPath}></script>
   </head>
   <body>
-    <header>
-      {statusMessage && <p>{statusMessage}</p>}
-    </header>
+    <header></header>
     <main>
       <h1>{title}</h1>
       <slot />

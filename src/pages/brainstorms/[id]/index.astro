@@ -1,0 +1,201 @@
+---
+import { Debug } from "astro:components";
+import Layout from "@src/components/Layout.astro";
+import {
+    getBrainstormById,
+    getMessagesForBrainstorm,
+    addMessageToBrainstorm,
+    updateSummaryForBrainstorm,
+    deleteMessagesAfterId,
+} from "@src/db";
+import {
+    generateSummaryForBrainstorm,
+    getNewCoachMessageForBrainstorm,
+} from "@src/gpt";
+import { addBrainstormToWeaviate } from "@src/weaviate/add";
+import {
+    getSimilarBrainstorms,
+    getRelevantContextForBrainstorm,
+    getRelevantContextForBrainstormMessage,
+    getBrainstormFromWeaviateById,
+} from "@src/weaviate/query";
+
+const brainstormIdStr = Astro.params.id as string;
+const brainstormId = parseInt(brainstormIdStr, 10);
+
+console.log({ brainstormId });
+
+let brainstorm = getBrainstormById(brainstormId);
+
+if (!brainstorm) {
+    return new Response("Not found", { status: 404 });
+}
+
+let actionStatus = "";
+
+// TODO: should move these action handlers to a separate file
+if (Astro.request.method === "POST") {
+    const formData = await Astro.request.formData();
+    const action = formData.get("form-action") as string;
+    if (action === "add-user-message") {
+        const message = formData.get("message") as string;
+        await addMessageToBrainstorm({
+            brainstormId,
+            content: message,
+            role: "user",
+        });
+        actionStatus = "Message added";
+    }
+    if (action === "get-coach-message") {
+        // at the moment this is only getting the relevant context based on the vector of the brainstorm
+        // the vector of the brainstorm is calculated when someone clicks 'add to weaviate'
+        // so if you 'add to weaviate' then add more messages, the vector will not be up to date...
+        // so we should probably recalculate the vector when adding a message
+        // const contextForBrainstorm = await getRelevantContextForBrainstorm({
+        //     brainstormId,
+        // });
+        const lastMessage = getMessagesForBrainstorm(brainstormId).at(-1);
+        console.log({ lastMessageId: lastMessage.id });
+        const contextForLastMessage =
+            await getRelevantContextForBrainstormMessage({
+                brainstormMessageId: lastMessage.id,
+            });
+        console.log({ contextForLastMessage });
+        const coachMessage = await getNewCoachMessageForBrainstorm({
+            brainstormId,
+            relevantContext: contextForLastMessage,
+        });
+        await addMessageToBrainstorm({
+            brainstormId,
+            content: coachMessage,
+            role: "assistant",
+        });
+        actionStatus = "Coach message added";
+    }
+    if (action === "generate-summary") {
+        const summary = await generateSummaryForBrainstorm(brainstormId);
+        updateSummaryForBrainstorm({
+            brainstormId,
+            summary,
+        });
+        actionStatus = "Summary generated";
+    }
+    if (action === "add-to-weaviate") {
+        await addBrainstormToWeaviate({ brainstormId });
+        actionStatus = "Added to Weaviate";
+    }
+
+    if (action === "delete-messages-after-id") {
+        const messageIdStr = formData.get("message-id") as string;
+        const messageId = parseInt(messageIdStr, 10);
+        deleteMessagesAfterId({
+            brainstormId,
+            messageId,
+        });
+        actionStatus = "Messages deleted";
+    }
+}
+
+// hacky to refetch
+brainstorm = getBrainstormById(brainstormId);
+
+const weaviateBrainstorm = await getBrainstormFromWeaviateById({
+    brainstormId: brainstormId,
+});
+
+const similarBrainstorms = await getSimilarBrainstorms({
+    brainstormId: brainstormId,
+});
+
+const messages = getMessagesForBrainstorm(brainstormId);
+---
+
+<Layout>
+    {actionStatus && <p class="status">{actionStatus}</p>}
+    <h1>Brainstorm: {brainstorm.title}</h1>
+    <h2>Summary</h2>
+    {brainstorm.summary && <pre>{brainstorm.summary}</pre>}
+    <form method="POST">
+        <button name="form-action" value="generate-summary"
+            >Generate summary</button
+        >
+    </form>
+
+    <form method="POST">
+        <button name="form-action" value="add-to-weaviate"
+            >Add brainstorm to Weaviate</button
+        >
+    </form>
+
+    <h2>Transcript</h2>
+    <ul>
+        {
+            messages.map((message) => (
+                <li>
+                    {message.role}: {message.content}
+                    <form method="POST">
+                        <input
+                            type="hidden"
+                            name="message-id"
+                            value={message.id}
+                        />
+                        <button
+                            name="form-action"
+                            value="delete-messages-after-id"
+                        >
+                            Delete after this message
+                        </button>
+                    </form>
+                </li>
+            ))
+        }
+    </ul>
+    <form method="POST">
+        <button name="form-action" value="get-coach-message"
+            >Get coach message</button
+        >
+    </form>
+    <form method="POST">
+        <label for="message-input">Message</label>
+        <textarea name="message" id="message-input"></textarea>
+        <button name="form-action" value="add-user-message" type="submit"
+            >Send</button
+        >
+    </form>
+
+    <h2>Similar brainstorms</h2>
+    <ul>
+        {
+            similarBrainstorms.map((brainstorm) => (
+                <li>
+                    <a href={`/brainstorms/${brainstorm.brainstormId}`}>
+                        {brainstorm.title} (distance:{" "}
+                        {brainstorm._additional.distance})
+                    </a>
+                </li>
+            ))
+        }
+    </ul>
+
+    <Debug {similarBrainstorms} />
+    <Debug {weaviateBrainstorm} />
+
+    <Debug {messages} />
+</Layout>
+
+<style>
+    textarea {
+        width: 100%;
+        height: 100px;
+    }
+
+    pre {
+        white-space: pre-wrap;
+    }
+
+    .status {
+        background-color: lightgreen;
+        padding: 1em;
+    }
+</style>
+@src/weaviate/add

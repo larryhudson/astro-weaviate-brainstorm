@@ -1,0 +1,19 @@
+---
+import { createBrainstorm } from "@src/db";
+
+if (Astro.request.method === "POST") {
+    // create a new brainstorm
+    const formData = await Astro.request.formData();
+    const title = formData.get("title");
+    const userId = 1;
+
+    const createdBrainstormId = await createBrainstorm({
+        title,
+        userId,
+    });
+
+    return Astro.redirect(`/brainstorms/${createdBrainstormId}`);
+} else {
+    return Astro.redirect("/");
+}
+---
