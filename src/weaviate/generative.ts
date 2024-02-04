@@ -12,7 +12,7 @@ export async function generateSummaryForBrainstorm({
         .graphql.get()
         .withClassName("BrainstormMessage")
         .withGenerate({
-            groupedTask: "Use the brainstorm messages to write a summary of the brainstorm session. Use Markdown for formatting. Write a clear, standalone document that could be shared to get feedback on the ideas."
+            groupedTask: "Use the brainstorm messages to write a summary of the brainstorm session. Use Markdown for formatting. Write a clear, standalone document that could be shared to get feedback on the ideas. Write in the first person as the user."
         })
         .withWhere({
             path: ["hasBrainstorm", "Brainstorm", "id"],
