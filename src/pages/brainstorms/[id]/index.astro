@@ -56,8 +56,12 @@ if (Astro.request.method === "POST") {
         //         brainstormMessageId: lastMessage.id,
         //     });
         // console.log({ contextForLastMessage });
+        const shouldUseRelevantContext =
+            formData.get("use-relevant-context") === "on";
+
         const coachMessage = await getNewCoachMessageForBrainstorm({
             brainstormId,
+            shouldUseRelevantContext,
         });
         await createBrainstormMessage({
             brainstormId,
