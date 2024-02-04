@@ -1,5 +1,5 @@
 ---
-import { createBrainstorm } from "@src/db";
+import { createBrainstorm } from "@src/weaviate/crud";
 
 if (Astro.request.method === "POST") {
     // create a new brainstorm
@@ -7,10 +7,12 @@ if (Astro.request.method === "POST") {
     const title = formData.get("title");
     const userId = 1;
 
-    const createdBrainstormId = await createBrainstorm({
+    const createdBrainstorm = await createBrainstorm({
         title,
         userId,
     });
+
+    const createdBrainstormId = createdBrainstorm.id;
 
     return Astro.redirect(`/brainstorms/${createdBrainstormId}`);
 } else {

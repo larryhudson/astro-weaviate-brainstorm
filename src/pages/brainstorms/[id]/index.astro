@@ -2,30 +2,25 @@
 import { Debug } from "astro:components";
 import Layout from "@src/components/Layout.astro";
 import {
-    getBrainstormById,
-    getMessagesForBrainstorm,
-    addMessageToBrainstorm,
-    updateSummaryForBrainstorm,
-    deleteMessagesAfterId,
-} from "@src/db";
+    createBrainstormMessage,
+    updateBrainstormSummary,
+} from "@src/weaviate/crud";
 import {
-    generateSummaryForBrainstorm,
-    getNewCoachMessageForBrainstorm,
-} from "@src/gpt";
-import { addBrainstormToWeaviate } from "@src/weaviate/add";
-import {
-    getSimilarBrainstorms,
-    getRelevantContextForBrainstorm,
-    getRelevantContextForBrainstormMessage,
-    getBrainstormFromWeaviateById,
+    // getSimilarBrainstorms,
+    // getRelevantContextForBrainstorm,
+    // getRelevantContextForBrainstormMessage,
+    // getBrainstormFromWeaviateById,
+    getBrainstormWithMessagesById,
 } from "@src/weaviate/query";
+import {
+    getNewCoachMessageForBrainstorm,
+    generateSummaryForBrainstorm,
+    getRelevantContextForBrainstormMessage,
+} from "@src/weaviate/generative";
 
-const brainstormIdStr = Astro.params.id as string;
-const brainstormId = parseInt(brainstormIdStr, 10);
+const brainstormId = Astro.params.id as string;
 
-console.log({ brainstormId });
-
-let brainstorm = getBrainstormById(brainstormId);
+let brainstorm = getBrainstormWithMessagesById({ brainstormId });
 
 if (!brainstorm) {
     return new Response("Not found", { status: 404 });
@@ -39,7 +34,7 @@ if (Astro.request.method === "POST") {
     const action = formData.get("form-action") as string;
     if (action === "add-user-message") {
         const message = formData.get("message") as string;
-        await addMessageToBrainstorm({
+        await createBrainstormMessage({
             brainstormId,
             content: message,
             role: "user",
@@ -54,18 +49,17 @@ if (Astro.request.method === "POST") {
         // const contextForBrainstorm = await getRelevantContextForBrainstorm({
         //     brainstormId,
         // });
-        const lastMessage = getMessagesForBrainstorm(brainstormId).at(-1);
-        console.log({ lastMessageId: lastMessage.id });
-        const contextForLastMessage =
-            await getRelevantContextForBrainstormMessage({
-                brainstormMessageId: lastMessage.id,
-            });
-        console.log({ contextForLastMessage });
+        // const lastMessage = getMessagesForBrainstorm(brainstormId).at(-1);
+        // console.log({ lastMessageId: lastMessage.id });
+        // const contextForLastMessage =
+        //     await getRelevantContextForBrainstormMessage({
+        //         brainstormMessageId: lastMessage.id,
+        //     });
+        // console.log({ contextForLastMessage });
         const coachMessage = await getNewCoachMessageForBrainstorm({
             brainstormId,
-            relevantContext: contextForLastMessage,
         });
-        await addMessageToBrainstorm({
+        await createBrainstormMessage({
             brainstormId,
             content: coachMessage,
             role: "assistant",
@@ -73,41 +67,45 @@ if (Astro.request.method === "POST") {
         actionStatus = "Coach message added";
     }
     if (action === "generate-summary") {
-        const summary = await generateSummaryForBrainstorm(brainstormId);
-        updateSummaryForBrainstorm({
+        const summary = await generateSummaryForBrainstorm({ brainstormId });
+        await updateBrainstormSummary({
             brainstormId,
             summary,
         });
         actionStatus = "Summary generated";
     }
-    if (action === "add-to-weaviate") {
-        await addBrainstormToWeaviate({ brainstormId });
-        actionStatus = "Added to Weaviate";
+
+    if (action === "get-relevant-context") {
+        const brainstormMessageId = formData.get("message-id") as string;
+        const relevantContext = await getRelevantContextForBrainstormMessage({
+            brainstormMessageId,
+        });
+        actionStatus = "Relevant context: " + relevantContext;
     }
 
-    if (action === "delete-messages-after-id") {
-        const messageIdStr = formData.get("message-id") as string;
-        const messageId = parseInt(messageIdStr, 10);
-        deleteMessagesAfterId({
-            brainstormId,
-            messageId,
-        });
-        actionStatus = "Messages deleted";
-    }
+    // if (action === "delete-messages-after-id") {
+    //     const messageIdStr = formData.get("message-id") as string;
+    //     const messageId = parseInt(messageIdStr, 10);
+    //     deleteMessagesAfterId({
+    //         brainstormId,
+    //         messageId,
+    //     });
+    //     actionStatus = "Messages deleted";
+    // }
 }
 
 // hacky to refetch
-brainstorm = getBrainstormById(brainstormId);
+brainstorm = await getBrainstormWithMessagesById({ brainstormId });
 
-const weaviateBrainstorm = await getBrainstormFromWeaviateById({
-    brainstormId: brainstormId,
-});
+const messages = brainstorm.hasMessages;
 
-const similarBrainstorms = await getSimilarBrainstorms({
-    brainstormId: brainstormId,
-});
+// const weaviateBrainstorm = await getBrainstormFromWeaviateById({
+//     brainstormId: brainstormId,
+// });
 
-const messages = getMessagesForBrainstorm(brainstormId);
+// const similarBrainstorms = await getSimilarBrainstorms({
+//     brainstormId: brainstormId,
+// });
 ---
 
 <Layout>
@@ -120,19 +118,22 @@ const messages = getMessagesForBrainstorm(brainstormId);
             >Generate summary</button
         >
     </form>
-
-    <form method="POST">
-        <button name="form-action" value="add-to-weaviate"
-            >Add brainstorm to Weaviate</button
-        >
-    </form>
-
     <h2>Transcript</h2>
     <ul>
         {
-            messages.map((message) => (
+            messages?.map((message) => (
                 <li>
                     {message.role}: {message.content}
+                    <form method="POST">
+                        <input
+                            type="hidden"
+                            name="message-id"
+                            value={message._additional.id}
+                        />
+                        <button name="form-action" value="get-relevant-context">
+                            Get relevant context for this message
+                        </button>
+                    </form>
                     <form method="POST">
                         <input
                             type="hidden"
@@ -151,6 +152,10 @@ const messages = getMessagesForBrainstorm(brainstormId);
         }
     </ul>
     <form method="POST">
+        <label>
+            <input type="checkbox" name="use-relevant-context" />
+            Use relevant context from other brainstorms</label
+        >
         <button name="form-action" value="get-coach-message"
             >Get coach message</button
         >
@@ -163,7 +168,7 @@ const messages = getMessagesForBrainstorm(brainstormId);
         >
     </form>
 
-    <h2>Similar brainstorms</h2>
+    <!-- <h2>Similar brainstorms</h2>
     <ul>
         {
             similarBrainstorms.map((brainstorm) => (
@@ -175,12 +180,12 @@ const messages = getMessagesForBrainstorm(brainstormId);
                 </li>
             ))
         }
-    </ul>
+    </ul> -->
 
-    <Debug {similarBrainstorms} />
+    <!-- <Debug {similarBrainstorms} />
     <Debug {weaviateBrainstorm} />
 
-    <Debug {messages} />
+    <Debug {messages} /> -->
 </Layout>
 
 <style>
@@ -198,4 +203,3 @@ const messages = getMessagesForBrainstorm(brainstormId);
         padding: 1em;
     }
 </style>
-@src/weaviate/add

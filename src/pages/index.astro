@@ -1,13 +1,10 @@
 ---
 import Layout from "@src/components/Layout.astro";
 import { Debug } from "astro:components";
-import { getBrainstormsForUser } from "@src/db";
-import { weaviateClient } from "@src/weaviate";
-
-console.log(weaviateClient);
+import { getBrainstormsForUser } from "@src/weaviate/query";
 
 const userId = 1;
-const brainstorms = getBrainstormsForUser(userId);
+const brainstorms = await getBrainstormsForUser(userId);
 ---
 
 <Layout>

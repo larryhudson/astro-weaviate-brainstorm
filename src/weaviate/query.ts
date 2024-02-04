@@ -1,91 +1,28 @@
 import { weaviateClient } from ".";
 
-export async function getRelevantContextForBrainstormMessage({
-    brainstormMessageId
-}) {
-    const brainstormMessageInWeaviate = await getBrainstormMessageFromWeaviateById({
-        brainstormMessageId
+export async function getBrainstormsForUser(userId: number) {
+    const queryResponse = await weaviateClient.graphql
+        .get()
+        .withClassName("Brainstorm")
+        .withFields("title _additional { id }")
+        .withWhere({
+            path: ["userId"],
+            operator: "Equal",
+            valueNumber: userId
+        })
+        .do();
+
+    const brainstorms = queryResponse.data.Get.Brainstorm.map((brainstorm) => {
+        return {
+            id: brainstorm._additional.id,
+            title: brainstorm.title
+        }
     });
 
-    const brainstormMessageWeaviateId = brainstormMessageInWeaviate._additional.id;
-
-    const queryResponse = await weaviateClient
-        .graphql.get()
-        .withClassName("BrainstormMessage")
-        .withGenerate({
-            groupedTask: "Summarize the relevant context from previous brainstorms"
-        })
-        .withNearObject({
-            id: brainstormMessageWeaviateId
-        })
-        .withWhere({
-            operator: "And",
-            operands: [
-                {
-                    path: ["brainstormId"],
-                    operator: "NotEqual",
-                    valueNumber: brainstormMessageInWeaviate.brainstormId
-                },
-                {
-                    path: ["role"],
-                    operator: "Equal",
-                    valueString: "user"
-                }
-            ]
-        })
-        .withFields("content")
-        .withLimit(5)
-        .do()
-
-    const relevantContext = queryResponse.data.Get.BrainstormMessage[0]._additional.generate.groupedResult;
-
-    return relevantContext;
+    return brainstorms;
 }
 
-export async function getRelevantContextForBrainstorm({
-    brainstormId,
-}) {
-    const brainstormInWeaviate = await getBrainstormFromWeaviateById({
-        brainstormId
-    });
 
-    const brainstormWeaviateId = brainstormInWeaviate._additional.id;
-    const brainstormVector = brainstormInWeaviate._additional.vector;
-
-    console.log({ brainstormWeaviateId })
-
-    const queryResponse = await weaviateClient
-        .graphql.get()
-        .withClassName("BrainstormMessage")
-        .withGenerate({
-            groupedTask: "Summarize the relevant context from previous brainstorms"
-        })
-        .withNearVector({
-            vector: brainstormVector
-        })
-        .withWhere({
-            operator: "And",
-            operands: [
-                {
-                    path: ["brainstormId"],
-                    operator: "NotEqual",
-                    valueNumber: brainstormId
-                },
-                {
-                    path: ["role"],
-                    operator: "Equal",
-                    valueString: "user"
-                }
-            ]
-        })
-        .withFields("content")
-        .withLimit(5)
-        .do()
-
-    const relevantContext = queryResponse.data.Get.BrainstormMessage[0]._additional.generate.groupedResult;
-
-    return relevantContext;
-}
 
 export async function getSimilarBrainstorms({
     brainstormId
@@ -119,17 +56,67 @@ export async function getSimilarBrainstorms({
     return similarBrainstorms;
 }
 
-export async function getBrainstormFromWeaviateById({
+export async function getBrainstormById({
     brainstormId
+}: {
+    brainstormId: string
 }) {
+
+    const brainstormObj = await weaviateClient.data
+        .getterById()
+        .withClassName("Brainstorm")
+        .withId(brainstormId)
+        .withVector()
+        .do();
+
+    if (!brainstormObj) {
+        return null;
+    }
+
+    return brainstormObj;
+}
+
+type BrainstormWithMessages = {
+    title: string
+    hasMessages: {
+        role: string
+        content: string
+        _additional: {
+            id: string
+        }
+    }[]
+    _additional: {
+        id: string
+    }
+}
+
+export async function getBrainstormWithMessagesById({
+    brainstormId
+}: {
+    brainstormId: string
+}): Promise<BrainstormWithMessages> {
+
     const queryResponse = await weaviateClient.graphql
         .get()
         .withClassName("Brainstorm")
-        .withFields("brainstormId title  _additional { vector id }")
+        .withFields(`
+            title
+            summary
+            hasMessages {
+                ... on BrainstormMessage {
+                    _additional { id }
+                    role
+                    content
+                }
+            }
+            _additional {
+                id
+            }
+        `)
         .withWhere({
-            path: ["brainstormId"],
+            path: ["id"],
             operator: "Equal",
-            valueNumber: brainstormId
+            valueString: brainstormId
         })
         .do();
 
@@ -137,36 +124,29 @@ export async function getBrainstormFromWeaviateById({
         return null;
     }
 
-    const brainstorm = queryResponse.data.Get.Brainstorm[0];
+    const brainstormObj = queryResponse.data.Get.Brainstorm[0];
 
-    return brainstorm;
+    return brainstormObj;
 }
 
-export async function getBrainstormMessageFromWeaviateById({
+export async function getBrainstormMessageById({
     brainstormMessageId
+}: {
+    brainstormMessageId: string
 }) {
 
     console.log("Looking up brainstorm message with ID", brainstormMessageId)
 
-    const queryResponse = await weaviateClient.graphql
-        .get()
+    const brainstormMessageObj = await weaviateClient.data
+        .getterById()
         .withClassName("BrainstormMessage")
-        .withFields("brainstormId brainstormMessageId content role  _additional { id }")
-        .withWhere({
-            path: ["brainstormMessageId"],
-            operator: "Equal",
-            valueNumber: brainstormMessageId
-        })
+        .withId(brainstormMessageId)
         .do();
 
-    console.log("queryResponse")
-    console.log(queryResponse)
-
-    if (queryResponse.data.Get.BrainstormMessage.length === 0) {
+    if (!brainstormMessageObj) {
         return null;
     }
 
-    const brainstormMessage = queryResponse.data.Get.BrainstormMessage[0];
-
-    return brainstormMessage;
+    return brainstormMessageObj;
 }
+
