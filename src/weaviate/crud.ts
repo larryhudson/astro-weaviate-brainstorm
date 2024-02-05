@@ -29,7 +29,7 @@ type BrainstormMessage = {
     }
 }
 
-export async function getLastMessageInBrainstorm({ brainstormId }: { brainstormId: string }): Promise<BrainstormMessage> {
+export async function getLastMessageIdInBrainstorm({ brainstormId }: { brainstormId: string }): Promise<BrainstormMessage> {
     const queryResponse = await weaviateClient.graphql.get()
         .withClassName("BrainstormMessage")
         .withWhere(
@@ -49,8 +49,7 @@ export async function getLastMessageInBrainstorm({ brainstormId }: { brainstormI
         .withLimit(1)
         .do();
 
-    return queryResponse.data.Get.BrainstormMessage[0];
-
+    return queryResponse.data.Get.BrainstormMessage[0]._additional.id;
 }
 
 export async function createBrainstormMessage({ brainstormId, role, content }: { brainstormId: string, role: string, content: string }) {

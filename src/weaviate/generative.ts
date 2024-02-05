@@ -1,5 +1,5 @@
 import { weaviateClient } from "./client";
-import { getLastMessageInBrainstorm } from "./crud";
+import { getLastMessageIdInBrainstorm } from "./crud";
 import { getBrainstormMessageById } from "./query";
 
 export async function generateSummaryForBrainstorm({
@@ -48,16 +48,19 @@ export async function getNewCoachMessageForBrainstorm({
 
     let coachPrompt = `Use the brainstorm messages to ask a thought-provoking question that will help the user think deeper about their ideas.`;
     if (contextSource === "brainstormMessage") {
-        const lastMessage = await getLastMessageInBrainstorm({
+        const lastMessageId = await getLastMessageIdInBrainstorm({
             brainstormId
         })
         const relevantContext = await getRelevantContextFromSimilarBrainstormMessages({
-            brainstormMessageId: lastMessage._additional.id
+            brainstormMessageId: lastMessageId
         });
         coachPrompt += `\n Use this context: ${relevantContext}`
     } else if (contextSource === "brainstorm") {
-        const relevantContext = await getRelevantContextFromSimilarBrainstormSummaries({
+        const lastMessageId = await getLastMessageIdInBrainstorm({
             brainstormId
+        })
+        const relevantContext = await getRelevantContextFromSimilarBrainstormSummaries({
+            brainstormMessageId: lastMessageId
         });
         coachPrompt += `\n Use this context: ${relevantContext}`
     }
@@ -99,10 +102,21 @@ export async function getNewCoachMessageForBrainstorm({
 }
 
 export async function getRelevantContextFromSimilarBrainstormSummaries({
-    brainstormId
+    brainstormMessageId
 }: {
-    brainstormId: string
+    brainstormMessageId: string
 }) {
+
+    const brainstormMessageObj = await getBrainstormMessageById({
+        brainstormMessageId
+    });
+
+    console.log({ brainstormMessageObj })
+
+    const brainstormId = brainstormMessageObj.properties.hasBrainstorm[0].beacon.split("/").at(-1);
+
+    const messageVector = brainstormMessageObj.vector;
+
     const queryResponse = await weaviateClient
         .graphql.get()
         .withClassName("Brainstorm")
@@ -110,19 +124,12 @@ export async function getRelevantContextFromSimilarBrainstormSummaries({
             groupedTask: "These summaries are from the user's previous brainstorms. Summarize the relevant context to help the coach ask better questions"
         })
         .withWhere({
-            operator: "And",
-            operands: [
-                {
-                    path: ["id"],
-                    operator: "NotEqual",
-                    valueString: brainstormId
-                },
-                {
-                    path: ["role"],
-                    operator: "Equal",
-                    valueString: "user"
-                }
-            ]
+            path: ["id"],
+            operator: "NotEqual",
+            valueString: brainstormId
+        })
+        .withNearVector({
+            vector: messageVector
         })
         .withFields("summary")
         .withLimit(5)

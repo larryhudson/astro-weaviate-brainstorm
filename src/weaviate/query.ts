@@ -141,6 +141,7 @@ export async function getBrainstormMessageById({
         .getterById()
         .withClassName("BrainstormMessage")
         .withId(brainstormMessageId)
+        .withVector()
         .do();
 
     if (!brainstormMessageObj) {
