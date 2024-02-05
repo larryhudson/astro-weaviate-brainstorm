@@ -1,18 +1,22 @@
-import { weaviateClient } from ".";
+import { weaviateClient } from "./client";
 import { getLastMessageInBrainstorm } from "./crud";
-import { getBrainstormById, getBrainstormMessageById } from "./query";
+import { getBrainstormMessageById } from "./query";
 
 export async function generateSummaryForBrainstorm({
     brainstormId,
 }: {
     brainstormId: string;
-}): Promise<string> {
+}): Promise<{
+    summary: string;
+    summaryPrompt: string;
+}> {
+    const summaryPrompt = "Use the brainstorm messages to write a summary of the brainstorm session. Use Markdown for formatting. Write a clear, standalone document that could be shared to get feedback on the ideas. Write in the first person as the user."
 
     const queryResponse = await weaviateClient
         .graphql.get()
         .withClassName("BrainstormMessage")
         .withGenerate({
-            groupedTask: "Use the brainstorm messages to write a summary of the brainstorm session. Use Markdown for formatting. Write a clear, standalone document that could be shared to get feedback on the ideas. Write in the first person as the user."
+            groupedTask: summaryPrompt
         })
         .withWhere({
             path: ["hasBrainstorm", "Brainstorm", "id"],
@@ -24,28 +28,41 @@ export async function generateSummaryForBrainstorm({
 
     const summary = queryResponse.data.Get.BrainstormMessage[0]._additional.generate.groupedResult;
 
-    return summary;
+    return {
+        summary,
+        summaryPrompt
+    };
 }
 
 export async function getNewCoachMessageForBrainstorm({
     brainstormId,
-    shouldUseRelevantContext,
+    contextSource,
 }: {
     brainstormId: string;
-    shouldUseRelevantContext: boolean;
-}): Promise<string> {
+    contextSource: "brainstorm" | "brainstormMessage" | null;
+}): Promise<{
+    coachMessage: string;
+    coachPrompt: string;
+    contextSource: "brainstorm" | "brainstormMessage" | null;
+}> {
 
     let coachPrompt = `Use the brainstorm messages to ask a thought-provoking question that will help the user think deeper about their ideas.`;
-    if (shouldUseRelevantContext) {
+    if (contextSource === "brainstormMessage") {
         const lastMessage = await getLastMessageInBrainstorm({
             brainstormId
         })
-        const relevantContext = await getRelevantContextForBrainstormMessage({
+        const relevantContext = await getRelevantContextFromSimilarBrainstormMessages({
             brainstormMessageId: lastMessage._additional.id
         });
-        coachPrompt += `\n Use this context to ask a better question: ${relevantContext}`
-        console.log({ coachPrompt })
+        coachPrompt += `\n Use this context: ${relevantContext}`
+    } else if (contextSource === "brainstorm") {
+        const relevantContext = await getRelevantContextFromSimilarBrainstormSummaries({
+            brainstormId
+        });
+        coachPrompt += `\n Use this context: ${relevantContext}`
     }
+    console.log({ contextSource })
+    console.log({ coachPrompt })
 
     const queryResponse = await weaviateClient
         .graphql.get()
@@ -74,11 +91,53 @@ export async function getNewCoachMessageForBrainstorm({
 
     const coachMessage = queryResponse.data.Get.BrainstormMessage[0]._additional.generate.groupedResult;
 
-    return coachMessage;
+    return {
+        coachMessage,
+        coachPrompt,
+        contextSource
+    };
 }
 
-export async function getRelevantContextForBrainstormMessage({
+export async function getRelevantContextFromSimilarBrainstormSummaries({
+    brainstormId
+}: {
+    brainstormId: string
+}) {
+    const queryResponse = await weaviateClient
+        .graphql.get()
+        .withClassName("Brainstorm")
+        .withGenerate({
+            groupedTask: "These summaries are from the user's previous brainstorms. Summarize the relevant context to help the coach ask better questions"
+        })
+        .withWhere({
+            operator: "And",
+            operands: [
+                {
+                    path: ["id"],
+                    operator: "NotEqual",
+                    valueString: brainstormId
+                },
+                {
+                    path: ["role"],
+                    operator: "Equal",
+                    valueString: "user"
+                }
+            ]
+        })
+        .withFields("summary")
+        .withLimit(5)
+        .do()
+
+    const relevantContext = queryResponse.data.Get.Brainstorm[0]._additional.generate.groupedResult;
+
+    return relevantContext;
+}
+
+// this gets relevant context for a brainstorm message, by searching for similar brainstorm messages in other 
+export async function getRelevantContextFromSimilarBrainstormMessages({
     brainstormMessageId
+}: {
+    brainstormMessageId: string
 }) {
 
     console.log("Getting relevant context for brainstorm message with ID", brainstormMessageId)
@@ -87,6 +146,7 @@ export async function getRelevantContextForBrainstormMessage({
         brainstormMessageId
     });
 
+    // beacon is in the form of "weaviate://localhost/BrainstormMessage/1234", so the ID is the last part
     const brainstormId = brainstormMessageObj.properties.hasBrainstorm[0].beacon.split("/").at(-1);
 
     if (!brainstormMessageObj) {
@@ -125,50 +185,3 @@ export async function getRelevantContextForBrainstormMessage({
 
     return relevantContext;
 }
-
-// export async function getRelevantContextForBrainstorm({
-//     brainstormId,
-// }) {
-
-//     const brainstormObj = await getBrainstormById({
-//         brainstormId
-//     });
-
-//     if (!brainstormObj) {
-//         return null;
-//     }
-
-//     const brainstormVector = brainstormObj.vector as number[];
-
-//     const queryResponse = await weaviateClient
-//         .graphql.get()
-//         .withClassName("BrainstormMessage")
-//         .withGenerate({
-//             groupedTask: "Summarize the relevant context from previous brainstorms"
-//         })
-//         .withNearVector({
-//             vector: brainstormVector
-//         })
-//         .withWhere({
-//             operator: "And",
-//             operands: [
-//                 {
-//                     path: ["hasBrainstorm", "Brainstorm", "_additional", "id"],
-//                     operator: "NotEqual",
-//                     valueNumber: brainstormId
-//                 },
-//                 {
-//                     path: ["role"],
-//                     operator: "Equal",
-//                     valueString: "user"
-//                 }
-//             ]
-//         })
-//         .withFields("content")
-//         .withLimit(5)
-//         .do()
-
-//     const relevantContext = queryResponse.data.Get.BrainstormMessage[0]._additional.generate.groupedResult;
-
-//     return relevantContext;
-// }

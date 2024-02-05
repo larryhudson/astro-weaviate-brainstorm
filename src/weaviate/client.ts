@@ -1,8 +1,8 @@
-import weaviate, { EmbeddedOptions } from "weaviate-ts-embedded";
+import weaviate, { EmbeddedOptions, type EmbeddedClient } from "weaviate-ts-embedded";
 import { initialiseSchema } from "./schema";
 import path from "path";
 
-async function initialiseWeaviate(client: typeof weaviateClient) {
+async function initialiseWeaviate(client: EmbeddedClient) {
   await initialiseSchema(client);
 }
 

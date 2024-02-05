@@ -1,4 +1,5 @@
 import type { EmbeddedClient } from "weaviate-ts-embedded";
+import { createBrainstorm, createBrainstormMessage } from "./crud";
 
 const BRAINSTORM_MESSAGE_CLASS = {
   class: "BrainstormMessage",
@@ -31,17 +32,16 @@ const BRAINSTORM_MESSAGE_CLASS = {
 const BRAINSTORM_CLASS = {
   class: "Brainstorm",
   description: "Brainstorms",
-  moduleConfig: {
-    "ref2vec-centroid": {
-      referenceProperties: ["hasMessages"],
-      method: "mean"
-    },
-  },
   properties: [
     {
       name: "userId",
       dataType: ["number"],
       description: "User ID",
+      moduleConfig: {
+        "text2vec-openai": {
+          skip: true,
+        },
+      }
     },
     {
       name: "title",
@@ -52,11 +52,21 @@ const BRAINSTORM_CLASS = {
       name: "hasMessages",
       dataType: ["BrainstormMessage"],
       description: "Brainstorm messages",
+      moduleConfig: {
+        "text2vec-openai": {
+          skip: true,
+        },
+      }
     },
     {
       name: "createdAt",
       dataType: ["date"],
       description: "Created at",
+      moduleConfig: {
+        "text2vec-openai": {
+          skip: true,
+        },
+      }
     },
     {
       name: "summary",
@@ -64,140 +74,130 @@ const BRAINSTORM_CLASS = {
       description: "Summary",
     }
   ],
-  vectorizer: "ref2vec-centroid",
 }
 
 const SEED_BRAINSTORMS = [
   {
     userId: 1,
-    title: "App for tracking sleep",
-    createdAt: "2022-01-01T00:00:00Z",
+    title: "Motivation for learning French",
     messages: [
       {
         role: "assistant",
         content: "What do you want to brainstorm about?",
-        createdAt: "2022-01-01T00:00:00Z"
       },
       {
         role: "user",
-        content: "I am thinking about a new app idea for tracking sleep",
-        createdAt: "2022-01-01T00:01:00Z"
+        content: "I want to brainstorm about my motivations for learning French. I am moving to Paris in a couple of months and I need to learn as much as I can. I have been procrastinating and I want to reinforce my motivations so I can be more engaged with it."
       },
       {
         role: "assistant",
-        content: "Why do you want to track sleep?",
-        createdAt: "2022-01-01T00:02:00Z",
+        content: "What are some benefits of learning French?"
       },
       {
         role: "user",
-        content: "I want to track my sleep to see if I can improve my sleep quality",
-        createdAt: "2022-01-01T00:03:00Z",
+        content: "Learning more French before I move will make it easier for me to communicate with people in Paris. It will give me a better foundation of knowledge so that I can deal with the shock of moving somewhere where they don't speak English."
+      },
+      {
+        role: "assistant",
+        content: "How can you make learning French easier or more fun?"
       }
     ]
   },
   {
     userId: 1,
     title: "Reflecting on the month",
-    createdAt: "2022-01-31T00:00:00Z",
     messages: [
       {
         role: "assistant",
         content: "What do you want to brainstorm about?",
-        createdAt: "2022-01-31T00:00:00Z",
       },
       {
         role: "user",
         content: "It is the end of January. I want to review what I have done this month and think about some highlights",
-        createdAt: "2022-01-31T00:01:00Z",
       },
       {
         role: "assistant",
         content: "What are some highlights from this month?",
-        createdAt: "2022-01-31T00:02:00Z",
+      },
+      {
+        role: "user",
+        content: "I have been practicing meditation - I started learning how to meditate and have been doing it every day in the morning. I have also been learning French."
+      },
+      {
+        role: "assistant",
+        content: "Are there any projects or tasks that you have completed this month that you are proud of?"
+      }
+    ]
+  },
+  {
+    userId: 1,
+    title: "My goals for this year",
+    messages: [
+      {
+        role: "assistant",
+        content: "What do you want to brainstorm about?",
+      },
+      {
+        role: "user",
+        content: "I want to brainstorm about my goals for this year. I want to set some goals for the year and think about how I can achieve them."
+      },
+      {
+        role: "assistant",
+        content: "What are some goals that you want to achieve this year?"
+      },
+      {
+        role: "user",
+        content: "I want to achieve some balance with how I spend my time and my interests. I want to use time blocking to make progress on the different things that I am interested in, rather than getting into one thing and neglecting everything else."
+      },
+      {
+        role: "assistant",
+        content: "What are some practical ways you can make sure you're making progress on your goals?"
+      },
+      {
+        role: "user",
+        content: "I can use time blocking to make sure that I am making progress on the different things that I am interested in. I can also use a journal to track my progress and reflect on how I am doing."
       }
     ]
   }
 ]
 
-async function addSeedData(client: EmbeddedClient) {
-  console.log("Adding seed data")
+async function addSeedData() {
   for (const brainstorm of SEED_BRAINSTORMS) {
-    const createdBrainstorm = await client.data.creator()
-      .withClassName(BRAINSTORM_CLASS.class)
-      .withProperties({
-        userId: brainstorm.userId,
-        title: brainstorm.title,
-        createdAt: brainstorm.createdAt
-      })
-      .do();
+    const createdBrainstorm = await createBrainstorm({
+      userId: brainstorm.userId,
+      title: brainstorm.title
+    });
 
     const createdBrainstormId = createdBrainstorm.id as string;
 
-    const createdMessageIds = [];
-
     for (const message of brainstorm.messages) {
-      const createdMessage = await client.data.creator()
-        .withClassName(BRAINSTORM_MESSAGE_CLASS.class)
-        .withProperties({
-          role: message.role,
-          content: message.content,
-          createdAt: message.createdAt
-        })
-        .do();
-
-      createdMessageIds.push(createdMessage.id as string);
-    }
-
-    for (const createdMessageId of createdMessageIds) {
-      console.log("Adding reference from message to brainstorm")
-      await client.data.referenceCreator()
-        .withClassName(BRAINSTORM_CLASS.class)
-        .withId(createdBrainstormId)
-        .withReferenceProperty("hasMessages")
-        .withReference(
-          client.data
-            .referencePayloadBuilder()
-            .withClassName(BRAINSTORM_MESSAGE_CLASS.class)
-            .withId(createdMessageId)
-            .payload()
-        )
-        .do();
-
-      console.log("Adding reference from brainstorm to message")
-      await client.data.referenceCreator()
-        .withClassName(BRAINSTORM_MESSAGE_CLASS.class)
-        .withId(createdMessageId)
-        .withReferenceProperty("hasBrainstorm")
-        .withReference(
-          client.data
-            .referencePayloadBuilder()
-            .withClassName(BRAINSTORM_CLASS.class)
-            .withId(createdBrainstormId)
-            .payload()
-        )
-        .do();
+      await createBrainstormMessage({
+        brainstormId: createdBrainstormId,
+        role: message.role,
+        content: message.content,
+      });
     }
 
   }
 }
 
-export async function initialiseSchema(client: EmbeddedClient) {
+export async function initialiseSchema(weaviateClient: EmbeddedClient) {
 
-  const brainstormMessageSchemaExists = await client.schema.exists(BRAINSTORM_MESSAGE_CLASS.class);
+  const brainstormMessageSchemaExists = await weaviateClient.schema.exists(BRAINSTORM_MESSAGE_CLASS.class);
 
   if (!brainstormMessageSchemaExists) {
     console.log("Creating brainstorm message class");
-    await client.schema.classCreator().withClass(BRAINSTORM_MESSAGE_CLASS).do();
+    await weaviateClient.schema.classCreator().withClass(BRAINSTORM_MESSAGE_CLASS).do();
   }
 
-  const brainstormSchemaExists = await client.schema.exists(BRAINSTORM_CLASS.class);
+  const brainstormSchemaExists = await weaviateClient.schema.exists(BRAINSTORM_CLASS.class);
 
   if (!brainstormSchemaExists) {
     console.log("Creating brainstorm class");
-    await client.schema.classCreator().withClass(BRAINSTORM_CLASS).do();
+    await weaviateClient.schema.classCreator().withClass(BRAINSTORM_CLASS).do();
 
     // add 'hasBrainstorm' reference to BrainstormMessage
-    await client.schema
+    await weaviateClient.schema
       .propertyCreator()
       .withClassName("BrainstormMessage")
       .withProperty({
@@ -207,7 +207,7 @@ export async function initialiseSchema(client: EmbeddedClient) {
       })
       .do();
 
-    await addSeedData(client);
+    await addSeedData();
   }
 
 }

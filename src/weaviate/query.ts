@@ -1,4 +1,4 @@
-import { weaviateClient } from ".";
+import { weaviateClient } from "./client";
 
 export async function getBrainstormsForUser(userId: number) {
     const queryResponse = await weaviateClient.graphql

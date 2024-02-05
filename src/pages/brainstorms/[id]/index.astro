@@ -1,37 +1,31 @@
 ---
-import { Debug } from "astro:components";
 import Layout from "@src/components/Layout.astro";
 import {
     createBrainstormMessage,
     updateBrainstormSummary,
+    deleteMessageAndNewer,
+    deleteBrainstorm,
 } from "@src/weaviate/crud";
-import {
-    // getSimilarBrainstorms,
-    // getRelevantContextForBrainstorm,
-    // getRelevantContextForBrainstormMessage,
-    // getBrainstormFromWeaviateById,
-    getBrainstormWithMessagesById,
-} from "@src/weaviate/query";
+import { getBrainstormWithMessagesById } from "@src/weaviate/query";
 import {
     getNewCoachMessageForBrainstorm,
     generateSummaryForBrainstorm,
-    getRelevantContextForBrainstormMessage,
+    getRelevantContextFromSimilarBrainstormMessages,
 } from "@src/weaviate/generative";
 
 const brainstormId = Astro.params.id as string;
 
-let brainstorm = getBrainstormWithMessagesById({ brainstormId });
-
-if (!brainstorm) {
+const brainstormExists = await getBrainstormWithMessagesById({ brainstormId });
+if (!brainstormExists) {
     return new Response("Not found", { status: 404 });
 }
 
 let actionStatus = "";
 
-// TODO: should move these action handlers to a separate file
 if (Astro.request.method === "POST") {
     const formData = await Astro.request.formData();
     const action = formData.get("form-action") as string;
+
     if (action === "add-user-message") {
         const message = formData.get("message") as string;
         await createBrainstormMessage({
@@ -39,131 +33,143 @@ if (Astro.request.method === "POST") {
             content: message,
             role: "user",
         });
-        actionStatus = "Message added";
+        actionStatus = "Added new user message.";
     }
-    if (action === "get-coach-message") {
-        // at the moment this is only getting the relevant context based on the vector of the brainstorm
-        // the vector of the brainstorm is calculated when someone clicks 'add to weaviate'
-        // so if you 'add to weaviate' then add more messages, the vector will not be up to date...
-        // so we should probably recalculate the vector when adding a message
-        // const contextForBrainstorm = await getRelevantContextForBrainstorm({
-        //     brainstormId,
-        // });
-        // const lastMessage = getMessagesForBrainstorm(brainstormId).at(-1);
-        // console.log({ lastMessageId: lastMessage.id });
-        // const contextForLastMessage =
-        //     await getRelevantContextForBrainstormMessage({
-        //         brainstormMessageId: lastMessage.id,
-        //     });
-        // console.log({ contextForLastMessage });
-        const shouldUseRelevantContext =
-            formData.get("use-relevant-context") === "on";
 
-        const coachMessage = await getNewCoachMessageForBrainstorm({
+    if (action === "get-coach-message") {
+        const contextSource = formData.get("context-source");
+
+        const coachResponse = await getNewCoachMessageForBrainstorm({
             brainstormId,
-            shouldUseRelevantContext,
+            contextSource,
         });
+
         await createBrainstormMessage({
             brainstormId,
-            content: coachMessage,
+            content: coachResponse.coachMessage,
             role: "assistant",
         });
-        actionStatus = "Coach message added";
+
+        actionStatus =
+            "Added new coach message. Prompt: " + coachResponse.coachPrompt;
     }
+
     if (action === "generate-summary") {
-        const summary = await generateSummaryForBrainstorm({ brainstormId });
+        const summaryResponse = await generateSummaryForBrainstorm({
+            brainstormId,
+        });
         await updateBrainstormSummary({
             brainstormId,
-            summary,
+            summary: summaryResponse.summary,
         });
-        actionStatus = "Summary generated";
+        actionStatus =
+            "Generated summary. Prompt: " + summaryResponse.summaryPrompt;
     }
 
     if (action === "get-relevant-context") {
         const brainstormMessageId = formData.get("message-id") as string;
-        const relevantContext = await getRelevantContextForBrainstormMessage({
-            brainstormMessageId,
-        });
-        actionStatus = "Relevant context: " + relevantContext;
+        const relevantContext =
+            await getRelevantContextFromSimilarBrainstormMessages({
+                brainstormMessageId,
+            });
+        actionStatus = "Relevant context for message: " + relevantContext;
     }
 
-    // if (action === "delete-messages-after-id") {
-    //     const messageIdStr = formData.get("message-id") as string;
-    //     const messageId = parseInt(messageIdStr, 10);
-    //     deleteMessagesAfterId({
-    //         brainstormId,
-    //         messageId,
-    //     });
-    //     actionStatus = "Messages deleted";
-    // }
+    if (action === "delete-message-and-newer") {
+        const brainstormMessageId = formData.get("message-id") as string;
+        await deleteMessageAndNewer({
+            brainstormId,
+            brainstormMessageId,
+        });
+        actionStatus = "Messages deleted";
+    }
+
+    if (action === "delete-brainstorm") {
+        await deleteBrainstorm({
+            brainstormId,
+        });
+
+        return Astro.redirect("/");
+    }
 }
 
-// hacky to refetch
-brainstorm = await getBrainstormWithMessagesById({ brainstormId });
-
+const brainstorm = await getBrainstormWithMessagesById({ brainstormId });
 const messages = brainstorm.hasMessages;
-
-// const weaviateBrainstorm = await getBrainstormFromWeaviateById({
-//     brainstormId: brainstormId,
-// });
-
-// const similarBrainstorms = await getSimilarBrainstorms({
-//     brainstormId: brainstormId,
-// });
 ---
 
-<Layout>
+<Layout title={`Brainstorm: ${brainstorm.title}`}>
+    <p><a href="/">Back to all brainstorms</a></p>
     {actionStatus && <p class="status">{actionStatus}</p>}
-    <h1>Brainstorm: {brainstorm.title}</h1>
     <h2>Summary</h2>
     {brainstorm.summary && <pre>{brainstorm.summary}</pre>}
     <form method="POST">
         <button name="form-action" value="generate-summary"
             >Generate summary</button
         >
+        <button name="form-action" value="delete-brainstorm"
+            >Delete brainstorm</button
+        >
     </form>
     <h2>Transcript</h2>
-    <ul>
+    <ul class="messages-list">
         {
             messages?.map((message) => (
-                <li>
-                    {message.role}: {message.content}
-                    <form method="POST">
+                <li class="message">
+                    <strong>{message.role}</strong>: {message.content}
+                    <form method="POST" class="message-buttons">
                         <input
                             type="hidden"
                             name="message-id"
                             value={message._additional.id}
                         />
                         <button name="form-action" value="get-relevant-context">
-                            Get relevant context for this message
+                            Lookup context
                         </button>
-                    </form>
-                    <form method="POST">
-                        <input
-                            type="hidden"
-                            name="message-id"
-                            value={message.id}
-                        />
                         <button
                             name="form-action"
-                            value="delete-messages-after-id"
+                            value="delete-message-and-newer"
                         >
-                            Delete after this message
+                            Delete message and newer
                         </button>
                     </form>
                 </li>
             ))
         }
     </ul>
+    <h2>Get a new coach message</h2>
     <form method="POST">
-        <label>
-            <input type="checkbox" name="use-relevant-context" />
-            Use relevant context from other brainstorms</label
-        >
+        <fieldset>
+            <legend>Use relevant context</legend>
+            <input
+                type="radio"
+                name="context-source"
+                id="no-context-radio"
+                value=""
+                checked=""
+            />
+            <label for="no-context-radio">Do not lookup context</label>
+            <input
+                type="radio"
+                name="context-source"
+                id="brainstorm-message-radio"
+                value="brainstormMessage"
+            />
+            <label for="brainstorm-message-radio">Similar messages</label>
+            <input
+                type="radio"
+                name="context-source"
+                id="brainstorm-summary-radio"
+                value="brainstorm"
+            />
+            <label for="brainstorm-summary-radio"
+                >Similar brainstorm summaries</label
+            >
+        </fieldset>
         <button name="form-action" value="get-coach-message"
             >Get coach message</button
         >
     </form>
+    <h2>Send a new message</h2>
     <form method="POST">
         <label for="message-input">Message</label>
         <textarea name="message" id="message-input"></textarea>
@@ -171,25 +177,6 @@ const messages = brainstorm.hasMessages;
             >Send</button
         >
     </form>
-
-    <!-- <h2>Similar brainstorms</h2>
-    <ul>
-        {
-            similarBrainstorms.map((brainstorm) => (
-                <li>
-                    <a href={`/brainstorms/${brainstorm.brainstormId}`}>
-                        {brainstorm.title} (distance:{" "}
-                        {brainstorm._additional.distance})
-                    </a>
-                </li>
-            ))
-        }
-    </ul> -->
-
-    <!-- <Debug {similarBrainstorms} />
-    <Debug {weaviateBrainstorm} />
-
-    <Debug {messages} /> -->
 </Layout>
 
 <style>
@@ -204,6 +191,16 @@ const messages = brainstorm.hasMessages;
 
     .status {
         background-color: lightgreen;
-        padding: 1em;
+        padding: 1rem;
+    }
+
+    .message {
+        margin-bottom: 1rem;
+    }
+
+    .message-buttons {
+        display: flex;
+        gap: 1rem;
+        margin: 0.5rem 0;
     }
 </style>

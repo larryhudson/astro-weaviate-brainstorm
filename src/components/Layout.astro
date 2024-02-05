@@ -1,7 +1,5 @@
 ---
-import HtmxPath from "htmx.org/dist/htmx.min.js?url";
-
-const title = Astro.props.title || "Astro";
+const title = Astro.props.title || "Brainstorming with Astro + Weaviate";
 ---
 
 <html lang="en">
@@ -11,10 +9,8 @@ const title = Astro.props.title || "Astro";
     <meta name="viewport" content="width=device-width" />
     <meta name="generator" content={Astro.generator} />
     <title>{title}</title>
-    <script is:inline src={HtmxPath}></script>
   </head>
   <body>
-    <header></header>
     <main>
       <h1>{title}</h1>
       <slot />
