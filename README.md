@@ -1,81 +1,30 @@
-This is a project for me to play around with some ideas for a brainstorming app using Astro + Weaviate.
+# `astro-weviate-brainstorm`
 
-It's heavily inspired by [Brainstory](https://brainstory.ai) - a great web app that guides you through a brainstorming session and helps you turn your ideas into something real.
+This is a project for me to play around with some ideas for a brainstorming app using [Astro](https://astro.build) + [Weaviate](https://weaviate.io).
 
-# Astro starter with SQLite and BullMQ
+The web app gives you an AI coach that asks you questions to help you think through your idea. It's heavily inspired by [Brainstory](https://brainstory.ai) - a great web app that guides you through a brainstorming session and helps you turn your ideas into something real.
 
-This is an Astro starter project with a headstart for creating server-rendered web apps. I have been using this pattern for creating fairly simple web apps and deploying them on Ubuntu VPS servers.
+I'm using this project to help me learn more about vector databases, and find out what they could be useful for. If you want a real web app for brainstorming, try out [Brainstory](https://brainstory.ai)!
 
-- Astro with server-side rendering (with `@astrojs/node` adapter)
-- sqlite database using `better-sqlite3` library with script for initialising (`initialise-db.js`) and helper functions for CRUD actions (see `src/utils/db.js`)
-- Example routes for CRUD actions:
-    - index of notes `src/pages/notes/index.astro`
-    - view note `src/pages/notes/[id]/index.astro`
-    - edit note `src/pages/notes/[id]/edit.astro`
-- asynchronous task processing with `bullmq` library. can add jobs to queue inside Astro routes / API endpoints, and then the queue handles those jobs.
-- simple `<Layout>` component with status messages
-- simple `<Dump>` component for viewing variables in dev
-- import alias `@src` pointing to src folder for simple imports
+## 15 min video walkthrough
 
-## Local dev instructions
-- `git clone` this repository
-- to initialise database, edit the SQL create statements in `initialise-db.js` and then run `node initialise-db.js`
-- for asynchronous task processing:
-    - install Redis
-    - edit tasks in `consume-tasks.js` and run `node consume-tasks.js`
-- `npm run dev` to start up Astro dev server
+[![YouTube video - Using Weaviate's generative search for brainstorming](https://img.youtube.com/vi/vaUSLy2p5RkE/0.jpg)](https://www.youtube.com/watch?v=aUSLy2p5RkE "Using Weaviate's generative search for brainstorming")
 
-## Work in progress
-- Set up example async tasks. File upload and then process?
-- Instructions for deploying on a VPS server
-    - Setting up pm2
-    - Nginx configuration
-    - Process for making changes
+## How does this work?
+- This is an Astro web app that uses the `@astrojs/node` adapter to render the web app on the server.
+- The database is an [embedded instance of Weaviate](https://weaviate.io/developers/weaviate/installation/embedded) that runs within the same process as the Astro web server. When the Weaviate client is imported within the Astro application code, it sets up a dedicated Weaviate instance and connects to it.
+- When the Weaviate instance is initialised, it creates the `Brainstorm` and `BrainstormMessage` classes and adds some example brainstorms to get started.
+- The user uses the web app to create new brainstorms. Each brainstorm is a conversation with an AI coach. The coach uses the previous messages from the brainstorm to ask thought-provoking questions to help the user think through their ideas. 
 
-# From Astro
+## How to get started
+- Clone this Git repository. `cd` into the directory and run `npm install` to install the dependencies.
+- Duplicate `.env.sample` to `.env` and edit with your OpenAI API key. 
+- Run `npm run dev` to start up the local dev server. 
+- Go to [http://localhost:4321](http://localhost:4321) in your web browser.
 
-```
-npm create astro@latest -- --template minimal
-```
-
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/withastro/astro/tree/latest/examples/minimal)
-[![Open with CodeSandbox](https://assets.codesandbox.io/github/button-edit-lime.svg)](https://codesandbox.io/p/sandbox/github/withastro/astro/tree/latest/examples/minimal)
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/withastro/astro?devcontainer_path=.devcontainer/minimal/devcontainer.json)
-
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
-
-## 🚀 Project Structure
-
-Inside of your Astro project, you'll see the following folders and files:
-
-```
-/
-├── public/
-├── src/
-│   └── pages/
-│       └── index.astro
-└── package.json
-```
-
-Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page is exposed as a route based on its file name.
-
-There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
-
-Any static assets, like images, can be placed in the `public/` directory.
-
-## 🧞 Commands
-
-All commands are run from the root of the project, from a terminal:
-
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:3000`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
-
-## 👀 Want to learn more?
-
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+## Retrieval Augmented Generation (RAG) with Weaviate
+- This project uses Weaviate's ['generative search' or RAG](https://weaviate.io/developers/weaviate/search/generative) for a few features:
+    - to generate a new thought-provoking question using the previous messages from the brainstorm
+    - to find relevant context from preivous brainstorms
+    - to generate a summary of the brainstorm.
+- You can find the application code for these functions in `./src/weaviate/generative.ts`.
