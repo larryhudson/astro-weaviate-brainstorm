@@ -8,7 +8,7 @@ I'm using this project to help me learn more about vector databases, and find ou
 
 ## 15 min video walkthrough
 
-[![YouTube video - Using Weaviate's generative search for brainstorming](https://img.youtube.com/vi/vaUSLy2p5RkE/0.jpg)](https://www.youtube.com/watch?v=aUSLy2p5RkE "Using Weaviate's generative search for brainstorming")
+[![YouTube video - Using Weaviate's generative search for brainstorming](https://img.youtube.com/vi/aUSLy2p5RkE/0.jpg)](https://www.youtube.com/watch?v=aUSLy2p5RkE "Using Weaviate's generative search for brainstorming")
 
 ## How does this work?
 - This is an Astro web app that uses the `@astrojs/node` adapter to render the web app on the server.
