@@ -74,6 +74,9 @@ const BRAINSTORM_CLASS = {
       description: "Summary",
     }
   ],
+  invertedIndexConfig: {
+    indexNullState: true
+  }
 }
 
 const SEED_BRAINSTORMS = [
@@ -186,14 +189,12 @@ export async function initialiseSchema(weaviateClient: EmbeddedClient) {
   const brainstormMessageSchemaExists = await weaviateClient.schema.exists(BRAINSTORM_MESSAGE_CLASS.class);
 
   if (!brainstormMessageSchemaExists) {
-    console.log("Creating brainstorm message class");
     await weaviateClient.schema.classCreator().withClass(BRAINSTORM_MESSAGE_CLASS).do();
   }
 
   const brainstormSchemaExists = await weaviateClient.schema.exists(BRAINSTORM_CLASS.class);
 
   if (!brainstormSchemaExists) {
-    console.log("Creating brainstorm class");
     await weaviateClient.schema.classCreator().withClass(BRAINSTORM_CLASS).do();
 
     // add 'hasBrainstorm' reference to BrainstormMessage

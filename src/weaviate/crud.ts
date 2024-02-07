@@ -117,8 +117,6 @@ export async function deleteBrainstorm({ brainstormId }: { brainstormId: string 
         .withFields("hasBrainstorm { ... on Brainstorm { _additional { id } } } _additional { id }")
         .do();
 
-    console.log({ foundMessages: messageQueryResponse.data.Get.BrainstormMessage })
-
     const messageIds = messageQueryResponse.data.Get.BrainstormMessage.map((message: { _additional: { id: string } }) => message._additional.id);
 
     await deleteBrainstormMessages({
@@ -210,8 +208,6 @@ export async function deleteMessageAndNewer({ brainstormId, brainstormMessageId 
     const newerMessageIds = newerMessagesResponse.data.Get.BrainstormMessage.map((message: { _additional: { id: string } }) => message._additional.id);
 
     const messageIdsToDelete = [thisMessageId, ...newerMessageIds];
-
-    console.log({ messageIdsToDelete })
 
     await deleteBrainstormMessages({
         brainstormId,

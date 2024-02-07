@@ -135,8 +135,6 @@ export async function getBrainstormMessageById({
     brainstormMessageId: string
 }) {
 
-    console.log("Looking up brainstorm message with ID", brainstormMessageId)
-
     const brainstormMessageObj = await weaviateClient.data
         .getterById()
         .withClassName("BrainstormMessage")

@@ -11,6 +11,7 @@ import {
     getNewCoachMessageForBrainstorm,
     generateSummaryForBrainstorm,
     getRelevantContextFromSimilarBrainstormMessages,
+    findConnectionsWithOtherBrainstorms,
 } from "@src/weaviate/generative";
 
 const brainstormId = Astro.params.id as string;
@@ -21,6 +22,7 @@ if (!brainstormExists) {
 }
 
 let actionStatus = "";
+let connections = null;
 
 if (Astro.request.method === "POST") {
     const formData = await Astro.request.formData();
@@ -66,6 +68,13 @@ if (Astro.request.method === "POST") {
             "Generated summary. Prompt: " + summaryResponse.summaryPrompt;
     }
 
+    if (action === "find-connections") {
+        connections = await findConnectionsWithOtherBrainstorms({
+            brainstormId,
+        });
+        actionStatus = "Found connections with other brainstorms.";
+    }
+
     if (action === "get-relevant-context") {
         const brainstormMessageId = formData.get("message-id") as string;
         const relevantContext =
@@ -100,8 +109,34 @@ const messages = brainstorm.hasMessages;
 <Layout title={`Brainstorm: ${brainstorm.title}`}>
     <p><a href="/">Back to all brainstorms</a></p>
     {actionStatus && <p class="status">{actionStatus}</p>}
+    {
+        connections && (
+            <>
+                <ul>
+                    {connections.map((connection) => (
+                        <li>
+                            <strong>{connection.title}</strong>
+                            <br />
+                            <pre>{connection.connections}</pre>
+                        </li>
+                    ))}
+                </ul>
+            </>
+        )
+    }
     <h2>Summary</h2>
-    {brainstorm.summary && <pre>{brainstorm.summary}</pre>}
+    {
+        brainstorm.summary && (
+            <>
+                <pre>{brainstorm.summary}</pre>
+                <form method="POST">
+                    <button name="form-action" value="find-connections">
+                        Find connections with other brainstorms
+                    </button>
+                </form>
+            </>
+        )
+    }
     <form method="POST">
         <button name="form-action" value="generate-summary"
             >Generate summary</button

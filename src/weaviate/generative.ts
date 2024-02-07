@@ -1,6 +1,6 @@
 import { weaviateClient } from "./client";
 import { getLastMessageIdInBrainstorm } from "./crud";
-import { getBrainstormMessageById } from "./query";
+import { getBrainstormById, getBrainstormMessageById } from "./query";
 
 export async function generateSummaryForBrainstorm({
     brainstormId,
@@ -64,8 +64,6 @@ export async function getNewCoachMessageForBrainstorm({
         });
         coachPrompt += `\n Use this context: ${relevantContext}`
     }
-    console.log({ contextSource })
-    console.log({ coachPrompt })
 
     const queryResponse = await weaviateClient
         .graphql.get()
@@ -111,17 +109,17 @@ export async function getRelevantContextFromSimilarBrainstormSummaries({
         brainstormMessageId
     });
 
-    console.log({ brainstormMessageObj })
-
     const brainstormId = brainstormMessageObj.properties.hasBrainstorm[0].beacon.split("/").at(-1);
 
     const messageVector = brainstormMessageObj.vector;
+
+    const messageContent = brainstormMessageObj.properties.content;
 
     const queryResponse = await weaviateClient
         .graphql.get()
         .withClassName("Brainstorm")
         .withGenerate({
-            groupedTask: "These summaries are from the user's previous brainstorms. Summarize the relevant context to help the coach ask better questions"
+            groupedTask: `These summaries are from the user's previous brainstorms. Write a succinct paragraph of context related to this message: ${messageContent}`
         })
         .withWhere({
             path: ["id"],
@@ -129,11 +127,16 @@ export async function getRelevantContextFromSimilarBrainstormSummaries({
             valueString: brainstormId
         })
         .withNearVector({
-            vector: messageVector
+            vector: messageVector,
+            distance: 0.2
         })
         .withFields("summary")
-        .withLimit(5)
+        .withLimit(3)
         .do()
+
+    // TODO: I want to filter the results to only include the ones where the vector distance is less than a certain threshold
+    // but adding _additional { distance } to the 'fields' seems to break the query
+    // and I'm not sure how to add a 'where' filter for the vector distance.
 
     const relevantContext = queryResponse.data.Get.Brainstorm[0]._additional.generate.groupedResult;
 
@@ -147,27 +150,28 @@ export async function getRelevantContextFromSimilarBrainstormMessages({
     brainstormMessageId: string
 }) {
 
-    console.log("Getting relevant context for brainstorm message with ID", brainstormMessageId)
-
     const brainstormMessageObj = await getBrainstormMessageById({
         brainstormMessageId
     });
-
-    // beacon is in the form of "weaviate://localhost/BrainstormMessage/1234", so the ID is the last part
-    const brainstormId = brainstormMessageObj.properties.hasBrainstorm[0].beacon.split("/").at(-1);
 
     if (!brainstormMessageObj) {
         return null;
     }
 
+    // beacon is in the form of "weaviate://localhost/BrainstormMessage/1234", so the ID is the last part
+    const brainstormId = brainstormMessageObj.properties.hasBrainstorm[0].beacon.split("/").at(-1);
+
+    const messageContent = brainstormMessageObj.properties.content;
+
     const queryResponse = await weaviateClient
         .graphql.get()
         .withClassName("BrainstormMessage")
         .withGenerate({
-            groupedTask: "These messages are from the user's previous brainstorms. Summarize the relevant context to help the coach ask better questions"
+            groupedTask: `These messages are from the user's previous brainstorms. Write a succinct paragraph of context related to this message: ${messageContent}`
         })
         .withNearObject({
-            id: brainstormMessageId
+            id: brainstormMessageId,
+            distance: 0.2
         })
         .withWhere({
             operator: "And",
@@ -191,4 +195,67 @@ export async function getRelevantContextFromSimilarBrainstormMessages({
     const relevantContext = queryResponse.data.Get.BrainstormMessage[0]._additional.generate.groupedResult;
 
     return relevantContext;
+}
+
+export async function findConnectionsWithOtherBrainstorms({
+    brainstormId
+}: {
+    brainstormId: string
+}) {
+
+    const thisBrainstormObj = await getBrainstormById({
+        brainstormId
+    })
+
+    const thisBrainstormTitle = thisBrainstormObj.properties.title;
+    const thisBrainstormSummary = thisBrainstormObj.properties.summary;
+
+    if (!thisBrainstormSummary) {
+        throw new Error("This brainstorm does not have a summary yet")
+    }
+
+    const queryResponse = await weaviateClient
+        .graphql.get()
+        .withClassName("Brainstorm")
+        .withGenerate({
+            singlePrompt: `Make connections between this brainstorm and the other brainstorm titled {title}. Return a Markdown bullet list of maximum 5 items.
+            
+            This brainstorm with title ${thisBrainstormTitle}:
+            ${thisBrainstormSummary}
+            
+            The other brainstorm with title {title}:
+            {summary}`
+        })
+        .withWhere({
+            operator: "And",
+            operands: [
+                {
+                    path: ["id"],
+                    operator: "NotEqual",
+                    valueString: brainstormId
+                },
+                {
+                    path: ["summary"],
+                    operator: "IsNull",
+                    valueBoolean: false,
+                }
+            ]
+        })
+        .withNearObject({
+            id: brainstormId
+        })
+        .withFields("title summary")
+        .withLimit(5)
+        .do()
+
+    const brainstormsWithConnections = queryResponse.data.Get.Brainstorm.map((brainstorm: any) => {
+        return {
+            title: brainstorm.title,
+            summary: brainstorm.summary,
+            // TODO: can't seem to get the ID from the other brainstorm.
+            connections: brainstorm._additional.generate.singleResult
+        }
+    })
+
+    return brainstormsWithConnections;
 }
