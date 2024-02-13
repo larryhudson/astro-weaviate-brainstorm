@@ -1,5 +1,7 @@
 # `astro-weviate-brainstorm`
 
+[Check out my blog post about this project here](https://larryhudson.io/astro-weaviate-brainstorm/).
+
 This is a project for me to play around with some ideas for a brainstorming app using [Astro](https://astro.build) + [Weaviate](https://weaviate.io).
 
 The web app gives you an AI coach that asks you questions to help you think through your idea. It's heavily inspired by [Brainstory](https://brainstory.ai) - a great web app that guides you through a brainstorming session and helps you turn your ideas into something real.
